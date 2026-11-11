@@ -12,9 +12,12 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
-BANKSMAN = "/home/andres/.local/bin/banksman"
-WRAPPER = "/home/andres/.local/share/banksman/bin/adb"
+BANKSMAN = os.environ.get("BANKSMAN_BIN", str(Path.home() / ".local/bin/banksman"))
+WRAPPER = os.environ.get(
+    "BANKSMAN_ADB_WRAPPER", str(Path.home() / ".local/share/banksman/bin/adb")
+)
 HOST_COMMANDS = {
     "devices",
     "version",

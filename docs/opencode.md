@@ -37,7 +37,7 @@ reload it, adb still works through the shim. The plugin covers `./gradlew ...` d
 
 ```sh
 # CLI
-ln -sf /home/andres/src/banksman-opencode/bin/banksman ~/.local/bin/banksman
+ln -sf "$PWD/bin/banksman" "$HOME/.local/bin/banksman"
 banksman version
 
 # config: every AVD discovered, Studio-started AVDs may be granted, strict guard
@@ -50,7 +50,7 @@ banksman admin adb-shim > ~/.local/share/banksman/bin/adb
 chmod 755 ~/.local/share/banksman/bin/adb
 
 # the OpenCode-aware adb shim, first on PATH
-cp /home/andres/src/banksman-opencode/opencode/adb-shim.py ~/.local/bin/adb
+cp opencode/adb-shim.py "$HOME/.local/bin/adb"
 chmod 755 ~/.local/bin/adb
 
 # Gradle guard
@@ -63,7 +63,7 @@ Enable the plugin in `~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
 {
-  "plugins": ["/home/andres/.config/opencode/plugins/banksman-opencode"]
+  "plugins": ["/home/you/.config/opencode/plugins/banksman-opencode"]
 }
 ```
 

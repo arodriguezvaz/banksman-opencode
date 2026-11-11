@@ -1,9 +1,10 @@
 [holder]
 agents = ["opencode", "claude", "codex"]
 
-[android]
-sdk = "/home/andres/Android/Sdk"
-avd_home = "/home/andres/.android/avd"
+# Uncomment only if the SDK or AVD home is not the default for your platform.
+# [android]
+# sdk = "/path/to/Android/Sdk"
+# avd_home = "/path/to/.android/avd"
 
 [kinds.emulator]
 preset = "android-emulator"

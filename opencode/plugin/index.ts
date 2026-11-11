@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { promisify } from "node:util"
 
 const run = promisify(execFile)
-const BANKSMAN = process.env.BANKSMAN_BIN ?? "/home/andres/.local/bin/banksman"
+const BANKSMAN = process.env.BANKSMAN_BIN ?? join(homedir(), ".local/bin/banksman")
 
 type Lease = { id: string; resource: string; serial?: string }
 
