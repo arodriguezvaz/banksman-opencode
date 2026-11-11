@@ -89,7 +89,12 @@ strict = true
 ```
 
 `preselect = ["*"]` plus `discover --all --yes` allows every AVD present at discovery time.
-A new AVD needs another `banksman admin discover --all --yes` (or a timer).
+A new AVD needs another `banksman admin discover --all --yes` (or a timer). Run admin commands in
+a normal terminal: the OpenCode permissions deny `banksman admin`.
+
+`banksman admin doctor` may warn `adb-path` because `~/.local/bin/adb` is the OpenCode shim, not
+the generated banksman wrapper. The shim delegates to `~/.local/share/banksman/bin/adb`, which the
+doctor's `adb-wrapper` check verifies. The warning is expected; the guard is still active.
 
 ## Behaviour
 
