@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run the banksman-opencode fork from this checkout, without a virtualenv.
+# The package has no runtime dependencies outside the Python standard library.
+PYTHONPATH="/home/andres/src/banksman-opencode/src${PYTHONPATH:+:$PYTHONPATH}" \
+    exec /usr/bin/python3 -m banksman "$@"

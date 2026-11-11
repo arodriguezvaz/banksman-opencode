@@ -1,0 +1,16 @@
+[holder]
+agents = ["opencode", "claude", "codex"]
+
+[android]
+sdk = "/home/andres/Android/Sdk"
+avd_home = "/home/andres/.android/avd"
+
+[kinds.emulator]
+preset = "android-emulator"
+preselect = ["*"]
+unmanaged = "grant"
+boot_timeout = "4m"
+start_args = ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]
+
+[guard]
+strict = true
