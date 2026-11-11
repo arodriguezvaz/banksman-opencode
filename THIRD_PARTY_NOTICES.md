@@ -8,8 +8,7 @@
 - License: Apache License 2.0. The full text is in [LICENSE](LICENSE).
 - Changes in this distribution: OpenCode session identity, session-first ownership, session-aware
   guards and status labels, plus the OpenCode adapter. Upstream files that changed are marked by
-  the Git history; the fork/branch used for the upstream proposal is
-  https://github.com/arodriguezvaz/banksman.
+  the Git history. The downstream changes and the adapter are maintained in this repository.
 
 ## OpenCode plugin API
 

@@ -103,10 +103,9 @@ This is a guardrail, not a sandbox. Android Studio's own adb, absolute-path adb 
 ## Upstream
 
 - Upstream: [Twinsen81/banksman](https://github.com/Twinsen81/banksman)
-- Fork used for the upstream contribution: [arodriguezvaz/banksman](https://github.com/arodriguezvaz/banksman)
 - Downstream/adapters: this repository
 
-The OpenCode identity change is intended to be proposed upstream; the adb shim, the plugin and this README are integration code and are not part of the upstream project.
+The OpenCode session support lives in this downstream. Upstream banksman remains the lease/guard engine; the adb shim, the plugin and this README are integration code and are not part of the upstream project.
 
 ## License and attribution
 
