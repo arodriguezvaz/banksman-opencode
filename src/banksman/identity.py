@@ -24,7 +24,11 @@ from banksman.system import Process, started_no_later
 # The variable in which an agent gives the id of its session, for the agents that set one. The
 # session keeps its id when the agent runs it in a new process, so a new process of the session
 # continues its holdings. An agent without one loses only that.
-SESSION_VARIABLES = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_SESSION_ID"}
+SESSION_VARIABLES = {
+    "claude": "CLAUDE_CODE_SESSION_ID",
+    "codex": "CODEX_SESSION_ID",
+    "opencode": "OPENCODE_SESSION_ID",
+}
 # The variable in which an agent gives the pid of its agent process, for the agents that set
 # one. A command that has left the process tree of its agent, for example with nohup, keeps the
 # environment that it got from the agent.
@@ -72,6 +76,8 @@ def find_holder(
         agent_pid, agent = find_agent(table, rules.agents, caller, env, from_env=True)
     else:
         agent_pid, agent = find_agent(table, rules.agents, caller, env)
+    if agent is None:
+        agent = agent_from_env(env)
     if issue is not None and ISSUE.fullmatch(issue) is None:
         raise BanksmanError(
             "an issue id has 1 to 64 letters, digits, and the characters '#', '.', '_', '/',"
@@ -98,6 +104,25 @@ def agent_session(agent: str | None, env: Mapping[str, str]) -> str | None:
 
 def session_of(agent: str | None, env: Mapping[str, str]) -> Session | None:
     """Return the session of an agent process from the environment, when the agent gives one."""
+    session = agent_session(agent, env)
+    return None if agent is None or session is None else Session(agent, session)
+
+
+def agent_from_env(env: Mapping[str, str]) -> str | None:
+    """Return the agent that an environment names, when no process names it.
+
+    A Gradle daemon runs outside the process tree of the agent that started the build, but the
+    daemon takes the environment of each client for the build. OpenCode marks that environment
+    with `OPENCODE=1` (or `AI_AGENT=opencode`) and gives the session its own variable.
+    """
+    if env.get("OPENCODE") == "1" or env.get("AI_AGENT") == "opencode":
+        return "opencode" if env.get("OPENCODE_SESSION_ID") else None
+    return None
+
+
+def session_from_env(env: Mapping[str, str]) -> Session | None:
+    """Return the session that an environment names, when no agent process names it."""
+    agent = agent_from_env(env)
     session = agent_session(agent, env)
     return None if agent is None or session is None else Session(agent, session)
 

@@ -408,11 +408,13 @@ def started_text(started: StartedBy) -> str:
 
 
 def holder_label(lease: Lease | Event) -> str:
-    # For example "codex · #123 · verify the tablet layout". Without an issue id, the name of
-    # the worktree tells the holders apart.
+    # For example "opencode · ses_ab12 · #123 · verify the tablet layout". Without an issue id,
+    # the name of the worktree tells the holders apart. A session tells two sessions of one
+    # agent apart.
     owner = lease.owner or ""
     where = lease.issue or os.path.basename(owner) or owner
-    return " · ".join(part for part in (lease.agent, where, lease.purpose) if part) or NONE
+    session = lease.session[:8] if lease.session and lease.agent == "opencode" else None
+    return " · ".join(part for part in (lease.agent, session, where, lease.purpose) if part) or NONE
 
 
 def _time(wall: float, clock: Clock) -> str:
@@ -488,6 +490,7 @@ def groups(events: Sequence[Event]) -> list[list[Event]]:
             event.resource,
             event.owner,
             event.agent,
+            event.session if event.agent == "opencode" else None,
         )
         found.setdefault(key, []).append(event)
     return list(found.values())

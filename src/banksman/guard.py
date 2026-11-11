@@ -61,7 +61,7 @@ from banksman.history import (
     Event,
     History,
 )
-from banksman.identity import find_agent, find_holder, session_of
+from banksman.identity import find_agent, find_holder, session_from_env, session_of
 from banksman.lease import (
     HELD,
     LEASE_VARIABLE,
@@ -615,9 +615,14 @@ class Caller:
         return next((lease.holding for lease in self.leases if lease.lease_id == lease_id), None)
 
     def is_agent(self) -> bool:
-        """Whether the caller has an agent process: one above it, or one that its environment
-        names."""
-        return self._agent is not None
+        """Whether the caller has an agent process or a session that its environment names."""
+        return self._agent is not None or self._session is not None
+
+    @property
+    def session(self) -> str | None:
+        """Return the id of the caller's session, for a guard event."""
+        session = self._session
+        return None if session is None else session.session_id
 
     def holder(self) -> Holder:
         """Return the caller as acquire would record it: the worktree, the agent, and the issue."""
@@ -673,6 +678,10 @@ class Caller:
 
     @cached_property
     def _by_process(self) -> set[str]:
+        if self._session is not None and self._session.agent == "opencode":
+            # The OpenCode server is an ancestor of every session, so its owner process says
+            # nothing about which session a lease belongs to. The session is the identity.
+            return set()
         return {
             lease.holding
             for lease in self.leases
@@ -684,6 +693,12 @@ class Caller:
         session = self._session
         if session is None:
             return set()
+        if session.agent == "opencode":
+            return {
+                lease.holding
+                for lease in self.leases
+                if lease.agent == session.agent and lease.session == session.session_id
+            }
         running = _Started(lambda: self._table)
         return {lease.holding for lease in self.leases if session.continues(lease, running)}
 
@@ -701,7 +716,7 @@ class Caller:
 
     @cached_property
     def _session(self) -> Session | None:
-        return session_of(self._found[1], self.env)
+        return session_of(self._found[1], self.env) or session_from_env(self.env)
 
     @cached_property
     def _found(self) -> tuple[int | None, str | None]:

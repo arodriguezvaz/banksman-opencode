@@ -705,7 +705,7 @@ class Store:
         with self._lock():
             return self._labelled(self._scan(), owner_pid, label, session)
 
-    def held_by(self, owner_pid: int, session: Session | None = None) -> list[Lease]:
+    def held_by(self, owner_pid: int | None, session: Session | None = None) -> list[Lease]:
         """Return the valid held leases whose owner process is `owner_pid`, or that `session`
         continues."""
         with self._lock():
@@ -1418,7 +1418,7 @@ class Store:
     def _labelled(
         self,
         entries: Sequence[Lease | Unreadable],
-        owner_pid: int,
+        owner_pid: int | None,
         label: str,
         session: Session | None = None,
     ) -> dict[str, Lease]:
@@ -1445,7 +1445,7 @@ class Store:
     def _owned(
         self,
         entries: Sequence[Lease | Unreadable],
-        owner_pid: int,
+        owner_pid: int | None,
         session: Session | None = None,
     ) -> list[Lease]:
         """Return the valid held leases whose owner process is `owner_pid`, or that `session`
@@ -1456,13 +1456,29 @@ class Store:
     def _mine(
         self,
         entries: Sequence[Lease | Unreadable],
-        owner_pid: int,
+        owner_pid: int | None,
         session: Session | None,
     ) -> tuple[list[Lease], set[int], dict[int, str]]:
-        """Return the held leases whose owner process is `owner_pid`, or that `session`
-        continues, valid or not; the processes that this read, which are `owner_pid` and the
-        owner processes of the leases of the session; and the start times of those that run."""
+        """Return the held leases of the caller, valid or not.
+
+        A session is the identity when the caller has one: the owner process of a session lease
+        can be shared, for example the OpenCode server, so it must not make the leases of
+        another session the caller's. Without a session, the owner process decides.
+        """
         held = [entry for entry in entries if isinstance(entry, Lease) and entry.state in HELD]
+        if session is not None and session.agent == "opencode":
+            # OpenCode runs every session under one server process, so the owner process cannot
+            # tell the sessions apart. The session is the identity.
+            mine = [
+                lease
+                for lease in held
+                if lease.agent == session.agent and lease.session == session.session_id
+            ]
+            read = {lease.owner_pid for lease in mine if lease.owner_pid is not None}
+            if owner_pid is not None:
+                read.add(owner_pid)
+            running = self.system.running(sorted(read))
+            return mine, read, running
         others = (
             set()
             if session is None
@@ -1472,15 +1488,16 @@ class Store:
                 if lease.session == session.session_id and lease.owner_pid is not None
             }
         )
-        read = {owner_pid, *others}
+        read = set(others) if owner_pid is None else {owner_pid, *others}
         running = self.system.running(sorted(read))
-        started = running.get(owner_pid) if owner_pid > 0 else None
-        if started is None:
+        started = running.get(owner_pid) if owner_pid is not None and owner_pid > 0 else None
+        if owner_pid is not None and owner_pid > 0 and started is None:
             raise BanksmanError(f"process {owner_pid} is not running")
         mine = [
             lease
             for lease in held
-            if (lease.owner_pid, lease.owner_started) == (owner_pid, started)
+            if owner_pid is not None
+            and (lease.owner_pid, lease.owner_started) == (owner_pid, started)
             or (session is not None and session.continues(lease, running))
         ]
         return mine, read, running
