@@ -50,6 +50,8 @@ include = [
     "/src/banksman",
     "/tests",
     "/docs",
+    "/scripts",
+    "/install.sh",
     "/README.md",
     "/CHANGELOG.md",
     "/LICENSE",

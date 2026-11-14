@@ -62,6 +62,14 @@ GRADLE_INIT = Path(".gradle/init.d/banksman-build-slot.gradle")
 GRADLE_BUILD_SLOT = Path(".gradle/banksman/build-slot.gradle")
 GRADLE_GUARD_INIT = Path(".gradle/init.d/banksman-gradle-guard.gradle")
 GRADLE_GUARD = Path(".gradle/banksman/gradle-guard.gradle")
+# The OpenCode integration: the adb shim that acquires the session's lease, and the plugin.
+OPENCODE_SHIM = Path(".local/bin/adb")
+OPENCODE_PLUGIN_NAME = "banksman-opencode"
+OPENCODE_PLUGIN_DIR = Path(".config/opencode/plugins") / OPENCODE_PLUGIN_NAME
+OPENCODE_CONFIG_FILES = (
+    Path(".config/opencode/opencode.jsonc"),
+    Path(".config/opencode/opencode.json"),
+)
 SKILLS = {
     "claude": Path(".claude/skills/banksman/SKILL.md"),
     "codex": Path(".codex/skills/banksman/SKILL.md"),
@@ -128,6 +136,7 @@ def run(shell: Shell) -> list[Check]:
         _guarded("android-sdk", _android, config, config_path, wrapper),
         path_check,
         _guarded("adb-wrapper", _adb_wrapper, wrapper, config),
+        *_opencode(shell.home),
         *_gradle(shell.home, config, config_path),
         *_gradle_guard(shell.home),
         *_skills(shell.home),
@@ -313,11 +322,35 @@ def _android(config: Config | None, config_path: Path | None, wrapper: Path | No
 
 
 def _adb_on_path(shell: Shell, config: Config | None) -> tuple[Check, Path | None]:
-    """Check that the adb that the shell runs is the adb wrapper. Return the wrapper too."""
+    """Check that the adb that the shell runs is the adb wrapper, or the shim before it.
+    Return the wrapper too."""
     name = "adb-path"
     found = _on_path(shell.path, "adb", executable=False)
     runs = next((each for each in found if os.access(each, os.X_OK)), None)
     wrapper = next((each for each in found if _is_wrapper(each)), None)
+    shim = next((each for each in found if _is_opencode_shim(each)), None)
+    if shim is not None and shim == runs:
+        saved = shell.home / ADB_WRAPPER
+        if os.path.lexists(saved):
+            return (
+                Check(
+                    name,
+                    OK,
+                    f"the adb first on the PATH is the OpenCode shim {shim}, which delegates to"
+                    f" the adb wrapper {saved}",
+                ),
+                saved,
+            )
+        return (
+            Check(
+                name,
+                WARN,
+                f"the adb first on the PATH is the OpenCode shim {shim}, but no adb wrapper is"
+                f" saved at {saved}, so each adb call fails",
+                "banksman admin install-opencode --yes",
+            ),
+            None,
+        )
     if wrapper is not None:
         return _wrapper_on_path(name, wrapper, runs), wrapper
     saved = shell.home / ADB_WRAPPER
@@ -495,6 +528,66 @@ def _skills(home: Path) -> list[Check]:
             )
         )
     return checks
+
+
+def _opencode(home: Path) -> list[Check]:
+    """Check the OpenCode integration: the adb shim, the plugin, and its listing."""
+    checks = []
+    shim = home / OPENCODE_SHIM
+    checks.append(
+        _saved(
+            "opencode-shim",
+            shim,
+            printed.opencode_shim(),
+            "banksman admin install-opencode --yes",
+            Check("opencode-shim", SKIP, f"{shim} does not exist"),
+        )
+    )
+    directory = home / OPENCODE_PLUGIN_DIR
+    for file, name, expected in (
+        ("index.ts", "opencode-plugin", printed.opencode_plugin()),
+        ("package.json", "opencode-plugin-package", printed.opencode_plugin_package()),
+    ):
+        path = directory / file
+        checks.append(
+            _saved(
+                name,
+                path,
+                expected,
+                "banksman admin install-opencode --yes",
+                Check(name, SKIP, f"{path} does not exist"),
+            )
+        )
+    checks.append(_opencode_listing(home, directory))
+    return checks
+
+
+def _opencode_listing(home: Path, directory: Path) -> Check:
+    name = "opencode-config"
+    if not directory.is_dir():
+        return Check(name, SKIP, f"the OpenCode plugin is not installed: {directory} does not exist")
+    path = next((home / each for each in OPENCODE_CONFIG_FILES if (home / each).is_file()), None)
+    if path is None:
+        return Check(
+            name,
+            OK,
+            f"{directory} is in the global plugin directory, which OpenCode discovers; no"
+            " OpenCode configuration names it",
+        )
+    try:
+        text = _read(path)
+    except _Unreadable as exc:
+        return Check(name, WARN, f"cannot read {path}: {exc}")
+    if text is None:
+        return Check(name, WARN, f"{path} does not exist")
+    if str(directory) in text or OPENCODE_PLUGIN_NAME in text:
+        return Check(name, OK, f"{path} lists the plugin")
+    return Check(
+        name,
+        OK,
+        f"the plugin is discovered from {directory}; {path} does not name it, so it cannot pin"
+        " a version",
+    )
 
 
 def _saved(name: str, path: Path, expected: str, fix: str, missing: Check) -> Check:
@@ -704,6 +797,15 @@ def _is_wrapper(path: Path) -> bool:
         return False
     marker = printed.adb_shim_marker().encode()
     return head is not None and marker in head.splitlines()[:3]
+
+
+def _is_opencode_shim(path: Path) -> bool:
+    """Whether this file is the adb shim of the OpenCode integration, of this version."""
+    try:
+        text = _read(path)
+    except _Unreadable:
+        return False
+    return text is not None and text == printed.opencode_shim()
 
 
 def _read(path: Path) -> str | None:

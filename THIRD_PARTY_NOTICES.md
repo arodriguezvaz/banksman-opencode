@@ -12,8 +12,9 @@
 
 ## OpenCode plugin API
 
-- The plugin imports `@opencode/plugin` from the OpenCode runtime. The dependency is provided by
-  OpenCode and is not bundled in this repository. See the OpenCode project for its license.
+- The plugin uses the OpenCode V2 plugin API at runtime (`setup` and `ctx.tool.hook`); it imports
+  only Node.js built-ins and bundles no third-party package. See the OpenCode project for its
+  license.
 - The adb shim and the plugin use only the Python standard library and Node.js built-ins.
 
 ## Python standard library

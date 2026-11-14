@@ -11,9 +11,10 @@ the engine transparent to OpenCode.
 |---|---|---|
 | banksman fork | `src/banksman` | The engine, plus OpenCode session identity |
 | `banksman` launcher | `bin/banksman` | Runs the fork from the checkout, standard library only |
-| adb shim | `opencode/adb-shim.py` | Reads the OpenCode session, adopts/acquires a lease, then runs banksman's adb wrapper |
+| installer | `banksman admin install-opencode` | Writes the files below from the copies in the package |
+| adb shim | `src/banksman/opencode-adb-shim.py` | Reads the OpenCode session, adopts/acquires a lease, then runs banksman's adb wrapper |
 | banksman adb wrapper | generated: `~/.local/share/banksman/bin/adb` | The guard: permits or refuses an adb call |
-| OpenCode plugin | `opencode/plugin/` | Rewrites Gradle device commands with the lease/serial and releases on idle |
+| OpenCode plugin | `src/banksman/opencode-plugin.ts` | Rewrites Gradle device commands with the lease/serial and releases on idle |
 | Gradle guard | `~/.gradle/init.d` + `~/.gradle/banksman` | Checks install/uninstall/connected tasks against leases |
 | config/inventory | `~/.config/banksman/` | Which AVDs agents may use, timeouts, strict mode |
 
@@ -112,6 +113,7 @@ The guard remains the same.
 - `~/.local/state/banksman/`: log, lease-end record and quarantines.
 - `~/.local/share/banksman/bin/adb`: generated guard wrapper.
 - `~/.local/bin/adb`: the OpenCode shim; it delegates to the wrapper.
+- `~/.config/opencode/plugins/banksman-opencode/`: the plugin, as the installer writes it.
 
 ## Security model
 

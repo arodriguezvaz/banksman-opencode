@@ -29,6 +29,7 @@ from banksman import (
     fencing,
     guard,
     hooks,
+    install,
     job,
     printed,
     remote,
@@ -574,6 +575,64 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the part that the init script applies; save it as"
         " ~/.gradle/banksman/gradle-guard.gradle",
+    )
+    install_command = admin_commands.add_parser(
+        "install-opencode",
+        help="install the OpenCode integration: the adb shim, the Gradle guard, the example"
+        " configuration, and the plugin; --dry-run shows the plan and changes nothing",
+        allow_abbrev=False,
+    )
+    install_command.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would change, and write nothing",
+    )
+    install_command.add_argument(
+        "--yes", action="store_true", help="apply the plan without asking"
+    )
+    install_command.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="remove the files that this command writes, and keep the configuration, the"
+        " inventory and the leases",
+    )
+    install_command.add_argument(
+        "--sdk", type=Path, metavar="PATH", help="the Android SDK, when it is not the default"
+    )
+    install_command.add_argument(
+        "--avd-home", type=Path, metavar="PATH", help="the directory of the AVDs, when it is not"
+        " ~/.android/avd"
+    )
+    install_command.add_argument(
+        "--adb", metavar="PATH", help="the adb that the wrapper runs, when it is not the adb of"
+        " the SDK"
+    )
+    install_command.add_argument(
+        "--no-adb", action="store_true", help="skip the adb wrapper and the OpenCode shim"
+    )
+    install_command.add_argument(
+        "--no-gradle", action="store_true", help="skip the Gradle guard"
+    )
+    install_command.add_argument(
+        "--no-plugin", action="store_true", help="skip the OpenCode plugin"
+    )
+    install_command.add_argument(
+        "--no-config", action="store_true", help="skip the example configuration"
+    )
+    install_command.add_argument(
+        "--overwrite-config",
+        action="store_true",
+        help="replace an existing configuration with the example, after a backup",
+    )
+    install_command.add_argument(
+        "--write-config",
+        action="store_true",
+        help="add the plugin to the plugins array of the OpenCode configuration, after a backup",
+    )
+    install_command.add_argument(
+        "--discover",
+        action="store_true",
+        help="allow every discovered instance and account, as admin discover --all --yes does",
     )
     admin_commands.add_parser(
         "reap-agent",
@@ -3021,6 +3080,75 @@ def _cmd_admin_adb_shim(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_admin_install_opencode(args: argparse.Namespace) -> int:
+    options = install.Options(
+        home=doctor.home_directory(),
+        sdk=args.sdk,
+        avd_home=args.avd_home,
+        adb=args.adb,
+        adb_files=not args.no_adb,
+        gradle=not args.no_gradle,
+        plugin=not args.no_plugin,
+        config=not args.no_config,
+        overwrite_config=args.overwrite_config,
+        write_config=args.write_config,
+    )
+    if args.uninstall:
+        return _uninstall_opencode(options, args)
+    result = install.plan(options)
+    print(install.report(result, dry_run=args.dry_run))
+    if args.dry_run:
+        return 0
+    if not result.changes:
+        print("\nnothing to change")
+    else:
+        if not args.yes:
+            if not _is_terminal():
+                raise BanksmanError(
+                    "standard input is not a terminal: use --yes to apply the plan"
+                )
+            if not _confirm("apply these changes?"):
+                return 1
+        written = install.apply(result)
+        replaced = sum(1 for action in written if action.status == install.UPDATE)
+        message = f"\n{len(written)} files written"
+        if replaced:
+            message += f", {replaced} replaced with a backup beside it"
+        print(message)
+    if args.discover:
+        # The inventory is policy: an operator asks for the discovery, and it runs with --all
+        # and without questions, as the documentation does.
+        _cmd_admin_discover(argparse.Namespace(kind=None, all=True, yes=True, json=False))
+    # The doctor checks the files that this command just wrote, and says what remains to do.
+    shell = doctor.Shell(options.home, os.environ.get("PATH", ""), sys.argv[0])
+    checks = doctor.run(shell)
+    print("\n" + doctor.report(checks))
+    return 1 if doctor.failed(checks) else 0
+
+
+def _uninstall_opencode(options: install.Options, args: argparse.Namespace) -> int:
+    if args.dry_run:
+        print("would remove:")
+        print(install.describe(options))
+        return 0
+    if not args.yes:
+        if not _is_terminal():
+            raise BanksmanError("standard input is not a terminal: use --yes to remove the files")
+        if not _confirm("remove the OpenCode integration?"):
+            return 1
+    removed = install.uninstall(options)
+    if removed:
+        print("removed:")
+        print("\n".join(str(path) for path in removed))
+    else:
+        print("nothing to remove")
+    print(
+        "\nthe configuration, the inventory and the leases are kept: remove them by hand when"
+        " they are no longer needed"
+    )
+    return 0
+
+
 def _cmd_admin_reap_agent(args: argparse.Namespace) -> int:
     # banksman does not install the job itself: ~/Library/LaunchAgents and the crontab belong to
     # the operator.
@@ -3653,6 +3781,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "admin gradle-init": _cmd_admin_gradle_init,
     "admin adb-shim": _cmd_admin_adb_shim,
     "admin gradle-guard": _cmd_admin_gradle_guard,
+    "admin install-opencode": _cmd_admin_install_opencode,
     "admin reap-agent": _cmd_admin_reap_agent,
     "admin tag": _cmd_admin_tag,
     "admin untag": _cmd_admin_untag,

@@ -2,118 +2,88 @@
 
 ## Requirements
 
-- Python 3.11 or newer, with `venv`/`pip` or [`uv`](https://docs.astral.sh/uv/).
 - Linux or macOS.
-- Android SDK with `platform-tools` and `emulator`, and at least one AVD.
+- Python 3.11 or newer. No `pip`, `venv`, `uv` or npm is needed: the package uses only the
+  standard library.
+- The Android SDK with `platform-tools` and `emulator`, and at least one AVD.
 - OpenCode 2.2 or newer for the plugin.
 
-No runtime Python dependencies are needed beyond the standard library.
+## Quick start
 
-## 1. Get the CLI on PATH
-
-From a checkout of this repository:
+From a checkout:
 
 ```sh
-git clone https://github.com/arodriguezvaz/banksman-opencode.git
-cd banksman-opencode
-mkdir -p "$HOME/.local/bin"
-ln -sf "$PWD/bin/banksman" "$HOME/.local/bin/banksman"
-banksman version
+./install.sh --dry-run     # show every file it would write, and write nothing
+./install.sh               # print the plan, ask once, apply
+./install.sh --yes         # apply without questions
 ```
 
-`bin/banksman` runs the source tree directly. If you prefer an isolated environment:
+Without a checkout:
 
 ```sh
-uv tool install --from "$PWD" banksman   # or: python3 -m venv .venv && . .venv/bin/activate && pip install -e .
+curl -fsSL https://raw.githubusercontent.com/arodriguezvaz/banksman-opencode/main/install.sh | sh
 ```
 
-## 2. Configuration
+`install.sh` downloads the source to `~/.local/share/banksman-opencode` when it does not run from
+a checkout, links `~/.local/bin/banksman`, and runs `banksman admin install-opencode`. Pin a
+release with `BANKSMAN_REF=v0.2.0`; change the install directory with `BANKSMAN_HOME`.
 
-```sh
-mkdir -p "$HOME/.config/banksman"
-cp opencode/config.example.toml "$HOME/.config/banksman/config.toml"
-chmod 600 "$HOME/.config/banksman/config.toml"
-```
+The command writes:
 
-The example allows every AVD present at discovery time, grants AVDs that Android Studio started,
-and enables the strict guard. Review it before use:
+| File | Content |
+|---|---|
+| `~/.local/share/banksman/bin/adb` | banksman's adb wrapper: the guard |
+| `~/.local/bin/adb` | the OpenCode shim, which acquires the session's lease first |
+| `~/.gradle/init.d/banksman-gradle-guard.gradle` | Gradle init script |
+| `~/.gradle/banksman/gradle-guard.gradle` | the part that checks the device tasks |
+| `~/.config/banksman/config.toml` | the example configuration, only when it does not exist |
+| `~/.config/opencode/plugins/banksman-opencode/` | the plugin (`index.ts`, `package.json`) |
 
-```toml
-[holder]
-agents = ["opencode", "claude", "codex"]
+Every file is compared first: an identical file is left alone, a different file is replaced with a
+backup beside it (`*.bak-YYYYmmdd-HHMMSS`), and the configuration is never replaced unless you
+pass `--overwrite-config`.
 
-[kinds.emulator]
-preset = "android-emulator"
-preselect = ["*"]
-unmanaged = "grant"
-start_args = ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]
+### Options
 
-[guard]
-strict = true
-```
+| Option | Effect |
+|---|---|
+| `--dry-run` | show the plan and write nothing |
+| `--yes` | apply without asking; required when stdin is not a terminal |
+| `--sdk PATH` | the Android SDK, when it is not `~/Android/Sdk` |
+| `--avd-home PATH` | the AVD directory, when it is not `~/.android/avd` |
+| `--adb PATH` | the adb that the wrapper runs, when it is not the adb of the SDK |
+| `--no-adb` | skip the two adb files |
+| `--no-gradle` | skip the Gradle guard |
+| `--no-plugin` | skip the plugin |
+| `--no-config` | skip the example configuration |
+| `--overwrite-config` | replace an existing configuration with the example, after a backup |
+| `--write-config` | add the plugin to the `plugins` array of `opencode.jsonc`, after a backup |
+| `--discover` | allow every discovered instance and account (`admin discover --all --yes`) |
+| `--uninstall` | remove the files that the installer writes; keep config, inventory and leases |
 
-`banksman admin discover --all --yes` writes the actual allowlist to
-`~/.config/banksman/inventory.toml`. A new AVD is not offered until discovery runs again.
+The installer finishes with `banksman admin doctor`, so its output already says what is missing.
 
-## 3. The adb guard and the OpenCode shim
+## OpenCode configuration
 
-Banksman's generated wrapper is the guard. Keep it outside PATH:
-
-```sh
-mkdir -p "$HOME/.local/share/banksman/bin"
-banksman admin adb-shim > "$HOME/.local/share/banksman/bin/adb"
-chmod 755 "$HOME/.local/share/banksman/bin/adb"
-```
-
-The OpenCode-aware shim goes first on PATH:
-
-```sh
-cp opencode/adb-shim.py "$HOME/.local/bin/adb"
-chmod 755 "$HOME/.local/bin/adb"
-```
-
-Outside OpenCode (a normal terminal, Android Studio, an older tool), the shim passes through to
-the generated wrapper. Inside OpenCode it reads `OPENCODE_SESSION_ID`, adopts the session's lease
-or acquires one, then delegates to the wrapper.
-
-> **Warning:** this shadows the system `adb` for your shell and for OpenCode. That is intentional;
-> it is how the guard sees the call. Android Studio uses its own absolute adb and is unaffected.
-
-## 4. Gradle guard
-
-```sh
-mkdir -p "$HOME/.gradle/init.d" "$HOME/.gradle/banksman"
-banksman admin gradle-guard > "$HOME/.gradle/init.d/banksman-gradle-guard.gradle"
-banksman admin gradle-guard --part > "$HOME/.gradle/banksman/gradle-guard.gradle"
-```
-
-The init script fails open if banksman is missing or cannot start; `banksman admin doctor`
-checks both files.
-
-## 5. OpenCode plugin
-
-Copy or symlink `opencode/plugin/` to
-`$HOME/.config/opencode/plugins/banksman-opencode/` and add it to `opencode.jsonc`:
+OpenCode discovers the plugin directory `~/.config/opencode/plugins/banksman-opencode` on its own.
+Adding it to `opencode.jsonc` is optional; it pins the plugin explicitly. The installer prints the
+line. With `--write-config` it inserts it into the first existing `~/.config/opencode/opencode.jsonc`
+or `opencode.json`, keeps a backup, and leaves the file untouched when it cannot do so safely.
 
 ```jsonc
 {
-  "plugins": ["/home/you/.config/opencode/plugins/banksman-opencode"]
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["/home/you/.config/opencode/plugins/banksman-opencode"],
 }
 ```
 
-Use an absolute path. After changing plugin code, restart the service once:
+Use an absolute path. OpenCode reloads configuration without a restart; if the plugin does not
+appear, restart the service once with `opencode service restart`.
 
-```sh
-opencode service restart
-```
+## Permissions for agents
 
-The plugin uses `tool.execute.before`, because that hook receives the OpenCode `sessionID`; the
-shell hook does not. It injects `BANKSMAN_LEASE` and `ANDROID_SERIAL` into Gradle device commands
-and releases the lease on `session.idle` / `session.deleted`.
-
-## 6. Permissions and agent rules
-
-Keep operator commands out of the agents. Add rules like these to `opencode.jsonc`:
+Keep operator commands and raw adb paths away from agents. Add rules like these to the global
+`~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
 {
@@ -127,48 +97,75 @@ Keep operator commands out of the agents. Add rules like these to `opencode.json
     { "action": "shell", "resource": "*banksman admin*", "effect": "deny" },
     { "action": "shell", "resource": "*banksman release --all*", "effect": "deny" },
     { "action": "shell", "resource": "*banksman release --force*", "effect": "deny" }
-  ]
+  ],
 }
 ```
 
-Add a short `AGENTS.md` section:
+`banksman admin` is operator-only: run it from a normal terminal, not from an agent session.
 
-```markdown
-## Android emulators are shared
-
-- One AVD belongs to one OpenCode session at a time.
-- The banksman-opencode shim/plugin acquire the lease automatically.
-- Do not run `emulator` or `adb emu kill`; `banksman admin` is operator-only.
-- If a command is refused because another holder leases the device, wait or ask for another AVD.
-- For long work, use `banksman run --where kind=emulator -- <command>`.
-- `banksman status` shows the holder; `banksman held` shows your leases.
-```
-
-## 7. Discover and verify
+## Discover and verify
 
 ```sh
-banksman admin discover --all --yes
+banksman admin discover --all --yes    # or: ./install.sh --yes --discover
 banksman admin doctor
 banksman status
 ```
 
-`banksman admin doctor` may warn `adb-path` because `~/.local/bin/adb` is the OpenCode shim, not
-the generated wrapper. The shim delegates to the wrapper, and the `adb-wrapper` check verifies it;
-the warning is expected.
+`admin discover` writes the allowlist of AVDs to `~/.config/banksman/inventory.toml`. It is a human
+gate, not a cache: a new AVD is not offered until discovery runs again.
 
-## 8. New AVDs
+The example configuration allows every AVD present at discovery time, grants AVDs that Android
+Studio started, and enables the strict guard:
 
-The inventory is policy, not a cache. After creating an AVD in Android Studio:
+```toml
+[holder]
+agents = ["opencode", "claude", "codex"]
 
-```sh
-banksman admin discover --all --yes
+[kinds.emulator]
+preset = "android-emulator"
+preselect = ["*"]
+unmanaged = "grant"
+boot_timeout = "4m"
+start_args = ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]
+
+[guard]
+strict = true
 ```
 
-Run operator commands from a normal terminal, not from an OpenCode shell (the permissions above
-deny `banksman admin` there).
+## Upgrade
+
+```sh
+git pull                # or re-run install.sh, which refreshes the copy
+./install.sh --yes
+banksman admin doctor
+```
+
+The installer replaces the files that this banksman writes and keeps a backup of each one that
+changed. The doctor names every saved copy that belongs to another version.
 
 ## Uninstall
 
-Remove `~/.local/bin/adb`, `~/.local/bin/banksman`, the plugin directory, the Gradle guard files,
-and the banksman config/state. Restore the system adb by deleting the shim; `/usr/bin/adb` or the
-SDK adb takes over again. The emulator itself is not managed by this repository.
+```sh
+banksman admin install-opencode --uninstall
+```
+
+This removes the adb shim, the wrapper, the Gradle guard and the plugin. It keeps the
+configuration, the inventory and the leases; release the leases first with `banksman release
+--all`, and remove `~/.config/banksman` by hand when it is no longer needed. Remove the plugin
+entry from `opencode.jsonc`, and delete the `~/.local/bin/banksman` symlink if you installed it
+with `install.sh`.
+
+## Manual path
+
+Every piece has a command of its own, which the installer uses:
+
+```sh
+banksman admin adb-shim        # print the guard wrapper
+banksman admin gradle-guard    # print the Gradle init script
+banksman admin gradle-guard --part
+banksman admin doctor          # check what is saved
+```
+
+The OpenCode shim and the plugin are files of the package (`src/banksman/opencode-adb-shim.py`,
+`src/banksman/opencode-plugin.ts`, `src/banksman/opencode-plugin.json`), so the installer is the
+supported way to save a copy that `doctor` can check.

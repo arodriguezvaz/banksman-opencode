@@ -149,6 +149,10 @@ def test_a_complete_setup_passes(
         "android-sdk": "ok",
         "adb-path": "ok",
         "adb-wrapper": "ok",
+        "opencode-shim": "skip",
+        "opencode-plugin": "skip",
+        "opencode-plugin-package": "skip",
+        "opencode-config": "skip",
         "gradle-init": "ok",
         "gradle-build-slot": "ok",
         "gradle-guard-init": "ok",
@@ -649,3 +653,63 @@ def test_a_crontab_that_cannot_be_read_matters_only_with_a_timeout(
     )
     configure(config_path, TIMED, sdk=sdk)
     assert reap_job(capsys)["status"] == "warn"
+
+
+def save_opencode(home, plugin=True, listed=True):
+    save(home / doctor.OPENCODE_SHIM, printed.opencode_shim())
+    (home / doctor.OPENCODE_SHIM).chmod(0o755)
+    if plugin:
+        save(home / doctor.OPENCODE_PLUGIN_DIR / "index.ts", printed.opencode_plugin())
+        save(home / doctor.OPENCODE_PLUGIN_DIR / "package.json", printed.opencode_plugin_package())
+    if listed:
+        save(
+            home / doctor.OPENCODE_CONFIG_FILES[0],
+            '{\n  "plugins": ["%s"],\n}\n' % (home / doctor.OPENCODE_PLUGIN_DIR),
+        )
+
+
+def test_the_opencode_shim_and_plugin_pass(
+    capsys, home, sdk, tmp_path, monkeypatch, banksman_bin, config_path
+):
+    configure(config_path, sdk=sdk)
+    save_wrapper(home / doctor.ADB_WRAPPER.parent, sdk / "platform-tools" / "adb")
+    save_opencode(home)
+    set_path(
+        monkeypatch,
+        home / doctor.OPENCODE_SHIM.parent,
+        sdk / "platform-tools",
+        banksman_bin,
+    )
+    found = checks(capsys)
+    assert statuses(found)["opencode-shim"] == "ok"
+    assert statuses(found)["opencode-plugin"] == "ok"
+    assert statuses(found)["opencode-plugin-package"] == "ok"
+    assert statuses(found)["opencode-config"] == "ok"
+    assert statuses(found)["adb-path"] == "ok"
+    assert found["adb-path"]["detail"].startswith("the adb first on the PATH is the OpenCode shim")
+
+
+def test_a_stale_opencode_plugin_fails(capsys, home):
+    save_opencode(home)
+    (home / doctor.OPENCODE_PLUGIN_DIR / "index.ts").write_text("// old\n")
+    found = checks(capsys, status=1)
+    assert statuses(found)["opencode-plugin"] == "fail"
+    assert "install-opencode" in found["opencode-plugin"]["fix"]
+
+
+def test_an_opencode_plugin_that_is_not_listed_is_discovered(capsys, home):
+    save_opencode(home, listed=False)
+    found = checks(capsys)
+    assert statuses(found)["opencode-config"] == "ok"
+    assert "discovers" in found["opencode-config"]["detail"]
+
+
+def test_an_opencode_shim_without_the_wrapper_is_a_warning(
+    capsys, home, sdk, tmp_path, monkeypatch
+):
+    save(home / doctor.OPENCODE_SHIM, printed.opencode_shim())
+    (home / doctor.OPENCODE_SHIM).chmod(0o755)
+    set_path(monkeypatch, home / doctor.OPENCODE_SHIM.parent, sdk / "platform-tools")
+    found = checks(capsys)
+    assert statuses(found)["adb-path"] == "warn"
+    assert statuses(found)["opencode-shim"] == "ok"

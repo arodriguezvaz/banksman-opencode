@@ -1,5 +1,6 @@
 """The files that banksman prints for the operator to save: the adb wrapper, the Gradle
-scripts of the build slots and of the adb guard, and the guide for agents.
+scripts of the build slots and of the adb guard, the guide for agents, and the OpenCode
+integration.
 
 `banksman admin doctor` compares the saved copies with this text. A comparison of the content
 needs no version stamp in the files, and every development install has the same version.
@@ -27,6 +28,11 @@ ADB_SHIM_PATH = "@ADB@"
 # The guide for agents, in the format of a skill, and the text in it that becomes the version.
 AGENT_GUIDE = "agent-guide.md"
 AGENT_GUIDE_VERSION = "@VERSION@"
+# The OpenCode integration: the example configuration, the adb shim, and the plugin package.
+OPENCODE_CONFIG = "opencode-config.toml"
+OPENCODE_ADB_SHIM = "opencode-adb-shim.py"
+OPENCODE_PLUGIN = "opencode-plugin.ts"
+OPENCODE_PLUGIN_PACKAGE = "opencode-plugin.json"
 
 
 def gradle_init() -> str:
@@ -71,6 +77,26 @@ def agent_guide() -> str:
     # The text of the installed version, so that an agent that reads it never follows rules of
     # another version. A copy that the operator saved names the version that printed it.
     return _text(AGENT_GUIDE).replace(AGENT_GUIDE_VERSION, __version__)
+
+
+def opencode_config() -> str:
+    """Return the example configuration of the OpenCode integration."""
+    return _text(OPENCODE_CONFIG)
+
+
+def opencode_shim() -> str:
+    """Return the OpenCode-aware adb shim, which acquires the session's lease."""
+    return _text(OPENCODE_ADB_SHIM)
+
+
+def opencode_plugin() -> str:
+    """Return the server part of the OpenCode plugin."""
+    return _text(OPENCODE_PLUGIN)
+
+
+def opencode_plugin_package() -> str:
+    """Return the package.json of the OpenCode plugin."""
+    return _text(OPENCODE_PLUGIN_PACKAGE)
 
 
 def _text(name: str) -> str:
